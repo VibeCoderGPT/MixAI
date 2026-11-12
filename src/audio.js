@@ -45,17 +45,17 @@ export async function render(buffer, values, masterGain=0) {
    const source=ctx.createBufferSource();source.buffer=buffer;chain(ctx,source,values).connect(ctx.destination);source.start();
    const rendered=await ctx.startRendering();
    const channels=Array.from({length:2},(_,c)=>rendered.getChannelData(c).slice());
-   return runWorker({channels,rate:buffer.sampleRate,target:-14},channels);
+   return runWorker({channels,rate:buffer.sampleRate},channels);
   })();
   baseCache={buffer,key,promise};
   promise.catch(()=>{if(baseCache?.promise===promise)baseCache=null;});
  }
  const base=await baseCache.promise;
  let measured=base;
- if(masterGain!==0){const channels=base.channels.map(c=>c.slice());measured=await runWorker({base:{...base,channels},rate:buffer.sampleRate,masterGain},channels);}
+ if(masterGain!==0||base.truePeakDb>-2.2){const channels=base.channels.map(c=>c.slice());measured=await runWorker({base:{...base,channels},rate:buffer.sampleRate,masterGain},channels);}
  const result=new AudioBuffer({numberOfChannels:2,length:buffer.length,sampleRate:buffer.sampleRate});
  measured.channels.forEach((data,c)=>result.copyToChannel(data,c));
- result.mastering={lufs:measured.lufs,truePeakDb:measured.truePeakDb,target:measured.target,limited:measured.limited};
+ result.mastering={lufs:measured.lufs,truePeakDb:measured.truePeakDb};
  return result;
 }
 export function wav(buffer) {
