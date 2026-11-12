@@ -26,7 +26,7 @@ export function stats(buffer) {
   for (let c = 0; c < buffer.numberOfChannels; c++) for (const v of buffer.getChannelData(c)) { peak = Math.max(peak, Math.abs(v)); sum += v*v; }
   return {peak, rms: Math.sqrt(sum / (buffer.length * buffer.numberOfChannels))};
 }
-export async function render(buffer, values) {
+export async function render(buffer, values, masterGain=0) {
   const ctx = new OfflineAudioContext(2, buffer.length, buffer.sampleRate);
   const source = ctx.createBufferSource(); source.buffer = buffer; chain(ctx, source, values).connect(ctx.destination); source.start();
   const result = await ctx.startRendering();
@@ -35,7 +35,7 @@ export async function render(buffer, values) {
     const worker=new Worker(new URL('./mastering-worker.js',import.meta.url),{type:'module'});
     worker.onmessage=({data})=>{worker.terminate();data.error?reject(new Error(data.error)):resolve(data);};
     worker.onerror=e=>{worker.terminate();reject(new Error(e.message));};
-    worker.postMessage({channels,rate:result.sampleRate,target:-14},channels.map(c=>c.buffer));
+    worker.postMessage({channels,rate:result.sampleRate,target:-14,masterGain},channels.map(c=>c.buffer));
   });
   measured.channels.forEach((data,c)=>result.copyToChannel(data,c));
   result.mastering={lufs:measured.lufs,truePeakDb:measured.truePeakDb,target:measured.target,limited:measured.limited};

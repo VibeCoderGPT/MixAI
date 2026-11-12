@@ -29,7 +29,7 @@ function limit(channels,rate,gain,ceiling){
  for(let i=0;i<length;i++){const wanted=Math.min(1,ceiling/(future[i]||1));envelope=wanted<envelope?wanted+(envelope-wanted)*attack:1-(1-envelope)*release;const safe=Math.min(envelope,ceiling/(peaks[i]||1));for(let c=0;c<out.length;c++)out[c][i]=channels[c][i]*gain*safe;}
  return out;
 }
-export function master(channels,rate,target=-14,ceilingDb=-1){
+export function master(channels,rate,target=-14,ceilingDb=-1,masterGain=0){
  const inputLUFS=loudness(channels,rate),ceiling=10**((ceilingDb-.2)/20);
  if(!Number.isFinite(inputLUFS)){const peak=truePeak(channels),gain=Math.min(1,ceiling/(peak||1));const out=channels.map(c=>c.map(v=>v*gain));return {channels:out,lufs:inputLUFS,truePeakDb:20*Math.log10(peak*gain),target,limited:true};}
  let drive=Math.min(30,target-inputLUFS),out,measured,peak;
@@ -37,6 +37,11 @@ export function master(channels,rate,target=-14,ceilingDb=-1){
   out=limit(channels,rate,10**(drive/20),ceiling);peak=truePeak(out);
   if(peak>ceiling){const correction=ceiling/peak;for(const data of out)for(let i=0;i<data.length;i++)data[i]*=correction;peak=ceiling;}
   measured=loudness(out,rate);const error=target-measured;if(Math.abs(error)<.2||drive>=30)break;drive=Math.min(30,drive+error);
+ }
+ if(masterGain!==0){
+  out=limit(out,rate,10**(masterGain/20),ceiling);peak=truePeak(out);
+  if(peak>ceiling){const correction=ceiling/peak;for(const data of out)for(let i=0;i<data.length;i++)data[i]*=correction;peak=ceiling;}
+  measured=loudness(out,rate);
  }
  return {channels:out,lufs:measured,truePeakDb:20*Math.log10(peak),target,limited:Math.abs(target-measured)>.5};
 }

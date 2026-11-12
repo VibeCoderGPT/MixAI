@@ -23,3 +23,7 @@ for(const rate of [44100,48000])test(`mastering meets independent FFmpeg loudnes
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
 test('silence remains silent and finite',()=>{const result=master([new Float32Array(48000)],48000);assert.equal(result.lufs,-Infinity);assert.ok(result.channels[0].every(v=>v===0));});
+test('master gain increases loudness while protecting reconstructed peaks',()=>{
+ const rate=44100,channels=[Float32Array.from({length:rate*2},(_,i)=>.06*Math.sin(i*.05))];const base=master(channels,rate),boost=master(channels,rate,-14,-1,6),cut=master(channels,rate,-14,-1,-6);
+ assert.ok(boost.lufs>base.lufs+3);assert.ok(boost.truePeakDb<=-1);assert.ok(Math.abs(cut.lufs-base.lufs+6)<.1);
+});

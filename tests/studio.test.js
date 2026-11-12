@@ -62,3 +62,13 @@ test('one white waveform bar follows playback and paused seeking',async()=>{
  await page.locator('#play').click();await page.locator('#seek').evaluate(el=>{el.value=75;el.dispatchEvent(new Event('input'));});await page.waitForTimeout(100);state=await check();assert.deepEqual(state.white,[state.expected]);assert.equal(await page.locator('#play').getAttribute('aria-label'),'Lire');
  }finally{await browser.close();}
 });
+test('master gain updates the processed waveform and original remains unchanged',async()=>{
+ const browser=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox']});try{
+ const page=await browser.newPage();await page.goto('http://localhost:5173');const samples=Float32Array.from({length:44100*2},(_,i)=>.03*Math.sin(i*.04));
+ await page.locator('#file').setInputFiles({name:'gain.wav',mimeType:'audio/wav',buffer:Buffer.from(await wav({numberOfChannels:1,length:samples.length,sampleRate:44100,getChannelData:()=>samples}).arrayBuffer())});await page.waitForFunction(()=>!document.querySelector('#export').disabled);await page.mouse.move(0,0);
+ const capture=()=>page.locator('#wave').evaluate(c=>c.toDataURL());const initial=await capture();
+ await page.locator('#original').click();await page.waitForTimeout(100);const original=await capture();assert.notEqual(initial,original);
+ await page.locator('#master').click();await page.locator('#master-gain').evaluate(el=>{el.value=6;el.dispatchEvent(new Event('input'));});await page.waitForFunction(()=>!document.querySelector('#export').disabled);assert.notEqual(await capture(),initial);assert.equal(await page.locator('#master-gain-value').textContent(),'+6 dB');
+ await page.locator('#original').click();await page.waitForTimeout(100);assert.equal(await capture(),original);assert.equal(await page.getByText('Audio 100 % local').count(),0);
+ }finally{await browser.close();}
+});

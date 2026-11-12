@@ -25,3 +25,5 @@ Les fichiers et réglages ne sont pas sauvegardés après rechargement. L’expo
 ## Espace disque
 
 Conserver le code et les dépendances de développement. Supprimer dist, test-results et les caches temporaires après vérification. Ne jamais versionner les fichiers audio utilisateur.
+
+Le gain master (−12 à +12 dB) s’applique après la normalisation de base et avant une nouvelle limitation des crêtes. Une valeur positive peut donc dépasser −14 LUFS tout en conservant le plafond true peak. La forme d’onde suit le tampon écouté (Original ou Master) et se met à jour quand le traitement différé termine. Les presets conservent le gain master ; Réinitialiser le remet à zéro.
