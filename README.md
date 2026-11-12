@@ -29,3 +29,11 @@ Conserver le code et les dépendances de développement. Supprimer dist, test-re
 Le gain master (−12 à +12 dB) précède la limitation des crêtes. Le signal avant limitation est mis en cache pour les changements de gain. La forme d’onde montre Original ou Master ; un indicateur apparaît pendant le calcul. Les presets conservent le gain master ; Réinitialiser le remet à zéro.
 
 Intensité contrôle un compresseur stéréo lié : seuil de −12 à −30 dBFS, ratio de 1:1 à 4:1, coude doux 6 dB, attaque 15 ms et relâchement 150 ms. À 0 %, cette étape est désactivée. Le niveau intégré avant compression est compensé après traitement (compensation plafonnée à 18 dB), sans cible LUFS imposée. Le gain master indépendant et le limiteur −2 dBTP suivent cette étape. Le limiteur peut réduire le niveau final si les crêtes l’exigent ; une hausse d’intensité ne garantit pas une hausse du volume.
+
+## Interface et exports
+
+Anglais et thème sombre par défaut ; langue FR/EN et thème clair/sombre mémorisés dans le navigateur. Une seule interface responsive : disposition compacte sur PC et disposition tactile sur mobile. Limite d’import inchangée : 5 minutes / 80 Mo.
+
+Sur PC : Espace active lecture/pause hors champs et boutons. Cliquer un réglage pour sélectionner, utiliser la molette au-dessus pour ajuster, cliquer à nouveau ou Entrée pour confirmer ; Échap restaure la valeur lors de la sélection. Les sliders et gestes tactiles restent disponibles.
+
+Export WAV PCM 24 bits avec dither ou MP3 à 192/320 kb/s. MP3 est un format avec pertes, plus compact ; sa conversion peut modifier les crêtes reconstruites. Le plafond du master PCM n’est pas une certification du MP3 décodé. L’encodage tourne dans un worker avec progression et capture les réglages prêts au moment du clic. LAME fonctionne à 32/44,1/48 kHz ; les autres fréquences sont converties à 48 kHz pour MP3. Notices et module original : public/licenses/.

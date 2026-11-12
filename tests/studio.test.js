@@ -10,7 +10,7 @@ test('24-bit WAV encodes PCM, RIFF padding and bounded dither',async()=>{
 });
 test('import, process, compare, seek, export and mobile layout',async()=>{
  const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
- try {const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://localhost:5173');
+ try {const page=await browser.newPage();await page.addInitScript(()=>localStorage.setItem("mixai-language","fr"));const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://localhost:5173');
  assert.equal(await page.locator('#export').isDisabled(),true);
  const samples=Float32Array.from({length:44100},(_,i)=>.25*Math.sin(2*Math.PI*220*i/44100));const file=Buffer.from(await wav({numberOfChannels:1,length:samples.length,sampleRate:44100,getChannelData:()=>samples}).arrayBuffer());
  await page.locator('#file').setInputFiles({name:'test-tone.wav',mimeType:'audio/wav',buffer:file});await page.waitForFunction(()=>!document.querySelector('#export').disabled);
@@ -24,7 +24,7 @@ test('import, process, compare, seek, export and mobile layout',async()=>{
 });
 test('preset changes keep playback advancing and respect pause',async()=>{
  const browser=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox']});
- try{const page=await browser.newPage();await page.goto('http://localhost:5173');
+ try{const page=await browser.newPage();await page.addInitScript(()=>localStorage.setItem("mixai-language","fr"));await page.goto('http://localhost:5173');
  const samples=Float32Array.from({length:44100*12},(_,i)=>.2*Math.sin(i*.04));
  await page.locator('#file').setInputFiles({name:'long.wav',mimeType:'audio/wav',buffer:Buffer.from(await wav({numberOfChannels:1,length:samples.length,sampleRate:44100,getChannelData:()=>samples}).arrayBuffer())});
  await page.waitForFunction(()=>!document.querySelector('#export').disabled);await page.locator('#play').click();
@@ -41,7 +41,7 @@ test('preset changes keep playback advancing and respect pause',async()=>{
 });
 test('waveform hover highlights a bar and clicks seek paused or playing',async()=>{
  const browser=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox']});
- try{const page=await browser.newPage();await page.goto('http://localhost:5173');
+ try{const page=await browser.newPage();await page.addInitScript(()=>localStorage.setItem("mixai-language","fr"));await page.goto('http://localhost:5173');
  await page.locator('#wave').click();assert.equal(await page.locator('#play').isDisabled(),true);
  const samples=Float32Array.from({length:44100*12},(_,i)=>.6*Math.sin(i*.04));
  await page.locator('#file').setInputFiles({name:'seek.wav',mimeType:'audio/wav',buffer:Buffer.from(await wav({numberOfChannels:1,length:samples.length,sampleRate:44100,getChannelData:()=>samples}).arrayBuffer())});
@@ -60,7 +60,7 @@ test('waveform hover highlights a bar and clicks seek paused or playing',async()
 });
 test('one white waveform bar follows playback and paused seeking',async()=>{
  const browser=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox']});
- try{const page=await browser.newPage();await page.goto('http://localhost:5173');const samples=Float32Array.from({length:44100*8},(_,i)=>.5*Math.sin(i*.04));
+ try{const page=await browser.newPage();await page.addInitScript(()=>localStorage.setItem("mixai-language","fr"));await page.goto('http://localhost:5173');const samples=Float32Array.from({length:44100*8},(_,i)=>.5*Math.sin(i*.04));
  await page.locator('#file').setInputFiles({name:'cursor.wav',mimeType:'audio/wav',buffer:Buffer.from(await wav({numberOfChannels:1,length:samples.length,sampleRate:44100,getChannelData:()=>samples}).arrayBuffer())});await page.waitForFunction(()=>!document.querySelector('#export').disabled);await page.mouse.move(0,0);
  const check=()=>page.evaluate(()=>{const c=document.querySelector('#wave'),ctx=c.getContext('2d'),width=c.getBoundingClientRect().width;const white=[];for(let x=0;x<width;x+=4){const p=ctx.getImageData(Math.floor((x+1)*devicePixelRatio),Math.floor(c.height/2),1,1).data;if(p[0]===255&&p[1]===255&&p[2]===255)white.push(x/4);}return {white,expected:Math.min(Math.ceil(width/4)-1,Math.round(Number(document.querySelector('#seek').value)/100*width/4))};});
  assert.deepEqual((await check()).white,[0]);await page.locator('#play').click();await page.waitForFunction(()=>Number(document.querySelector('#seek').value)>5);let state=await check();assert.deepEqual(state.white,[state.expected]);assert.ok(state.expected>0);
@@ -69,7 +69,7 @@ test('one white waveform bar follows playback and paused seeking',async()=>{
 });
 test('master gain updates the processed waveform and original remains unchanged',async()=>{
  const browser=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox']});try{
- const page=await browser.newPage();await page.goto('http://localhost:5173');const samples=Float32Array.from({length:44100*2},(_,i)=>.03*Math.sin(i*.04));
+ const page=await browser.newPage();await page.addInitScript(()=>localStorage.setItem("mixai-language","fr"));await page.goto('http://localhost:5173');const samples=Float32Array.from({length:44100*2},(_,i)=>.15*Math.sin(i*.04));
  await page.locator('#file').setInputFiles({name:'gain.wav',mimeType:'audio/wav',buffer:Buffer.from(await wav({numberOfChannels:1,length:samples.length,sampleRate:44100,getChannelData:()=>samples}).arrayBuffer())});await page.waitForFunction(()=>!document.querySelector('#export').disabled);await page.mouse.move(0,0);
  const capture=()=>page.locator('#wave').evaluate(c=>c.toDataURL());const initial=await capture();
  await page.locator('#original').click();await page.waitForTimeout(100);const original=await capture();assert.notEqual(initial,original);
@@ -96,7 +96,7 @@ test('master gain updates the processed waveform and original remains unchanged'
  }finally{await browser.close();}
 });
 test('compression and master gain retain the true peak ceiling across settings',async()=>{
- const browser=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox']});try{const page=await browser.newPage();await page.goto('http://localhost:5173');const results=await page.evaluate(async()=>{
+ const browser=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox']});try{const page=await browser.newPage();await page.addInitScript(()=>localStorage.setItem("mixai-language","fr"));await page.goto('http://localhost:5173');const results=await page.evaluate(async()=>{
  const {render}=await import('/src/audio.js');const rows=[];
  for(const type of ['dense','transient']){const b=new AudioBuffer({length:44100*3,sampleRate:44100,numberOfChannels:2});for(let c=0;c<2;c++)for(let i=0;i<b.length;i++){const t=i/44100;const envelope=type==='dense'?.7+.2*Math.sin(t*8):.12+.88*Math.exp(-15*(t%.4));b.getChannelData(c)[i]=.65*envelope*(Math.sin(t*1382)+.2*Math.sin(t*5300+c*.2));}const levels=[];for(const intensity of [0,25,50,75,100]){const out=await render(b,[intensity,1,1,1,100],6);levels.push(out.mastering);}rows.push({type,levels});}return rows;});
  for(const row of results){for(let i=0;i<row.levels.length;i++){assert.ok(row.levels[i].truePeakDb<=-2,JSON.stringify(row));assert.ok(Number.isFinite(row.levels[i].lufs));}}console.log(JSON.stringify(results));
