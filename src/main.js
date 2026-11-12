@@ -2,7 +2,7 @@ import './style.css';
 import {presets, render, stats, wav, cancelPendingGain} from './audio.js';
 const $ = s => document.querySelector(s);
 const labels = ['Intensité', 'Basses', 'Clarté', 'Chaleur', 'Largeur stéréo'];
-const hints = ['Une dynamique plus serrée', 'Le poids du bas du spectre', 'La présence des voix et des détails', 'Du corps dans les bas médiums', 'L’espace entre la gauche et la droite'];
+const hints = ['Densité : pousse progressivement le limiteur · 0 % = neutre', 'Le poids du bas du spectre', 'La présence des voix et des détails', 'Du corps dans les bas médiums', 'L’espace entre la gauche et la droite'];
 let masterGain = 0;
 let values = [...presets['Équilibré']], buffer, processed, context, source, sourceGain, playing=false, offset=0, started=0, mode='master', revision=0, busy=false;
 $('#app').innerHTML = `

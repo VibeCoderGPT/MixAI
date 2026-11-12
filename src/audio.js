@@ -7,14 +7,13 @@ export const presets = {
   'Streaming': [40, 1, 1, 0, 100],
 };
 export function chain(ctx, input, values) {
-  const [intensity, bass, clarity, warmth, width] = values;
+  const [, bass, clarity, warmth, width] = values;
   const low = ctx.createBiquadFilter(); low.type = 'lowshelf'; low.frequency.value = 120; low.gain.value = bass;
   const mid = ctx.createBiquadFilter(); mid.type = 'peaking'; mid.frequency.value = 350; mid.Q.value = .7; mid.gain.value = warmth;
   const high = ctx.createBiquadFilter(); high.type = 'highshelf'; high.frequency.value = 3500; high.gain.value = clarity;
-  const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -10 - intensity * .22; comp.ratio.value = 1 + intensity * .05; comp.knee.value = 20; comp.attack.value = .015; comp.release.value = .2;
-  input.connect(low).connect(mid).connect(high).connect(comp);
+  input.connect(low).connect(mid).connect(high);
   const splitter = ctx.createChannelSplitter(2), merger = ctx.createChannelMerger(2);
-  comp.connect(splitter);
+  high.connect(splitter);
   for (let output = 0; output < 2; output++) for (let source = 0; source < 2; source++) {
     const gain = ctx.createGain(); gain.gain.value = source === output ? (1 + width / 100) / 2 : (1 - width / 100) / 2;
     splitter.connect(gain, source); gain.connect(merger, 0, output);
@@ -38,7 +37,10 @@ function runWorker(payload,channels){
  });
 }
 export async function render(buffer, values, masterGain=0) {
- const key=JSON.stringify(values);
+ const key=JSON.stringify(values.slice(1));
+ // Intensity drives the same final limiter, rather than a second compressor
+ // with browser-dependent makeup gain. Zero is an exact intensity bypass.
+ const driveDb=masterGain+Math.max(0,Math.min(100,values[0]))*.06;
  if(!baseCache||baseCache.buffer!==buffer||baseCache.key!==key){
   const promise=(async()=>{
    const ctx=new OfflineAudioContext(2,buffer.length,buffer.sampleRate);
@@ -52,7 +54,7 @@ export async function render(buffer, values, masterGain=0) {
  }
  const base=await baseCache.promise;
  let measured=base;
- if(masterGain!==0||base.truePeakDb>-2.2){const channels=base.channels.map(c=>c.slice());measured=await runWorker({base:{...base,channels},rate:buffer.sampleRate,masterGain},channels);}
+ if(driveDb!==0||base.truePeakDb>-2.2){const channels=base.channels.map(c=>c.slice());measured=await runWorker({base:{...base,channels},rate:buffer.sampleRate,masterGain:driveDb},channels);}
  const result=new AudioBuffer({numberOfChannels:2,length:buffer.length,sampleRate:buffer.sampleRate});
  measured.channels.forEach((data,c)=>result.copyToChannel(data,c));
  result.mastering={lufs:measured.lufs,truePeakDb:measured.truePeakDb};
