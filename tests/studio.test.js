@@ -17,3 +17,20 @@ test('import, process, compare, seek, export and mobile layout',async()=>{
  await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(errors,[]);
  }finally{await browser.close();}
 });
+test('preset changes keep playback advancing and respect pause',async()=>{
+ const browser=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox']});
+ try{const page=await browser.newPage();await page.goto('http://localhost:5173');
+ const samples=Float32Array.from({length:44100*12},(_,i)=>.2*Math.sin(i*.04));
+ await page.locator('#file').setInputFiles({name:'long.wav',mimeType:'audio/wav',buffer:Buffer.from(await wav({numberOfChannels:1,length:samples.length,sampleRate:44100,getChannelData:()=>samples}).arrayBuffer())});
+ await page.waitForFunction(()=>!document.querySelector('#export').disabled);await page.locator('#play').click();
+ const before=Number(await page.locator('#seek').inputValue());
+ await page.getByRole('button',{name:'Punch',exact:true}).click();
+ assert.equal(await page.locator('#play').getAttribute('aria-label'),'Pause');assert.equal(await page.locator('#play').isDisabled(),false);
+ await page.waitForFunction(()=>!document.querySelector('#export').disabled);
+ await page.waitForFunction(p=>Number(document.querySelector('#seek').value)>p+2,before);
+ assert.equal(await page.locator('#play').getAttribute('aria-label'),'Pause');
+ await page.getByRole('button',{name:'Doux',exact:true}).click();await page.getByRole('button',{name:'Streaming',exact:true}).click();
+ await page.locator('#play').click();await page.waitForFunction(()=>!document.querySelector('#export').disabled);
+ assert.equal(await page.locator('#play').getAttribute('aria-label'),'Lire');assert.equal(await page.locator('#preset-label').textContent(),'Streaming');
+ }finally{await browser.close();}
+});

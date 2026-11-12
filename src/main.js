@@ -3,7 +3,7 @@ import {presets, render, stats, wav} from './audio.js';
 const $ = s => document.querySelector(s);
 const labels = ['Intensité', 'Basses', 'Clarté', 'Chaleur', 'Largeur stéréo'];
 const hints = ['Une dynamique plus serrée', 'Le poids du bas du spectre', 'La présence des voix et des détails', 'Du corps dans les bas médiums', 'L’espace entre la gauche et la droite'];
-let values = [...presets['Équilibré']], buffer, processed, context, source, playing=false, offset=0, started=0, mode='master', revision=0, busy=false;
+let values = [...presets['Équilibré']], buffer, processed, context, source, sourceGain, playing=false, offset=0, started=0, mode='master', revision=0, busy=false;
 $('#app').innerHTML = `
 <header><a class="brand" href="./" aria-label="MixAI accueil"><span class="signal-logo" aria-hidden="true"><i></i><i></i><i></i></span> MixAI</a><span class="header-label">MASTERING</span><span class="local"><i></i> Audio 100 % local</span></header>
 <main><div class="workspace"><aside class="sidebar"><div class="section-heading"><h2>Préréglages</h2></div><div class="presets">${Object.keys(presets).map((p,i)=>`<button data-preset="${p}" aria-pressed="${i===0}" class="${i===0?'selected':''}"><span class="preset-icon" aria-hidden="true">${['≋','≡','◈','ϟ','≈','◎'][i]}</span>${p}</button>`).join('')}</div><div class="sidebar-note">Votre son.<br>Votre signature.</div><span class="local"><i></i> Traitement local</span></aside><div class="studio"><section class="track-panel"><div class="section-heading"><h1>Studio de mastering</h1><span class="step">SIGNAL / 01</span></div>
@@ -21,15 +21,40 @@ function sync(){values.forEach((v,i)=>{ $(`#control-${i}`).value=v; const input=
 sync();
 function time(n){return `${Math.floor(n/60)}:${String(Math.floor(n%60)).padStart(2,'0')}`;}
 function position(){return playing?Math.min(buffer.duration,offset+context.currentTime-started):offset;}
-function stop(){if(source){source.onended=null;source.stop();source.disconnect();source=null;} playing=false;$('#play').textContent='▶';$('#play').setAttribute('aria-label','Lire');}
-async function play(){ if(!buffer||busy)return; context ||= new AudioContext(); await context.resume(); const pos=offset>=buffer.duration?0:offset; source=context.createBufferSource(); source.buffer=mode==='master'?processed:buffer; source.connect(context.destination); source.start(0,pos); offset=pos; started=context.currentTime; playing=true; $('#play').textContent='Ⅱ';$('#play').setAttribute('aria-label','Pause'); source.onended=()=>{playing=false;offset=0;$('#play').textContent='▶';$('#play').setAttribute('aria-label','Lire');}; }
+const voices = new Set();
+function release(voice) { voice.source.disconnect(); voice.gain.disconnect(); voices.delete(voice); }
+function stop(){
+ for(const voice of voices){voice.source.onended=null;try{voice.source.stop();}catch{}release(voice);}
+ source=null;sourceGain=null;playing=false;$('#play').textContent='▶';$('#play').setAttribute('aria-label','Lire');
+}
+function startVoice(audio, pos, when, fade=false){
+ const next=context.createBufferSource(), gain=context.createGain();next.buffer=audio;next.connect(gain).connect(context.destination);
+ gain.gain.setValueAtTime(fade?0:1,when);if(fade)gain.gain.linearRampToValueAtTime(1,when+.04);
+ const voice={source:next,gain};voices.add(voice);
+ next.onended=()=>{release(voice);if(source===next){source=null;sourceGain=null;playing=false;offset=0;$('#play').textContent='▶';$('#play').setAttribute('aria-label','Lire');}};
+ next.start(when,pos);source=next;sourceGain=gain;
+}
+function swapMaster(){
+ if(!playing||mode!=='master'||!source)return;
+ const when=context.currentTime+.02, pos=position()+.02;
+ if(pos>=buffer.duration)return;
+ const old=source, gain=sourceGain;
+ gain.gain.cancelAndHoldAtTime(when);gain.gain.linearRampToValueAtTime(0,when+.04);old.stop(when+.04);
+ startVoice(processed,pos,when,true);
+}
+async function play(){
+ if(!buffer||(mode==='master'&&!processed)||playing)return;
+ context ||= new AudioContext();await context.resume();
+ const pos=offset>=buffer.duration?0:offset;startVoice(mode==='master'?processed:buffer,pos,context.currentTime);
+ offset=pos;started=context.currentTime;playing=true;$('#play').textContent='Ⅱ';$('#play').setAttribute('aria-label','Pause');
+}
 $('#play').onclick=()=>{if(playing){offset=position();stop();}else play();};
 for(const m of ['original','master']) $(`#${m}`).onclick=()=>{const resume=playing;offset=position();stop();mode=m;for(const id of ['original','master']){$(`#${id}`).classList.toggle('active',id===m);$(`#${id}`).setAttribute('aria-pressed',id===m);}if(resume)play();};
 $('#seek').oninput=()=>{const resume=playing;stop();offset=Number($('#seek').value)*buffer.duration/100;if(resume)play();};
 function draw(){const canvas=$('#wave'),r=canvas.getBoundingClientRect();canvas.width=r.width*devicePixelRatio;canvas.height=r.height*devicePixelRatio;const c=canvas.getContext('2d');c.scale(devicePixelRatio,devicePixelRatio);const data=buffer?.getChannelData(0);for(let x=0;x<r.width;x+=4){let peak=.025;if(data){const start=Math.floor(x/r.width*data.length),end=Math.floor((x+4)/r.width*data.length);for(let j=start;j<Math.min(end,data.length);j++)peak=Math.max(peak,Math.abs(data[j]));}c.fillStyle=data?'#FF7547':'#363c45';const h=Math.max(2,peak*r.height*.85);c.fillRect(x,(r.height-h)/2,2,h);}}
 new ResizeObserver(draw).observe($('#wave'));
-async function update(){if(!buffer)return;const ticket=++revision;busy=true;offset=position();stop();$('#export').disabled=true;$('#play').disabled=true;status('Préparation de votre master…');try{const result=await render(buffer,[...values]);if(ticket!==revision)return;processed=result;const peak=stats(result).peak;$('#peak').innerHTML=`${peak? (20*Math.log10(peak)).toFixed(1):'−∞'} <em>dBFS</em>`;status('Master prêt. Écoutez et ajustez à votre goût.');}catch(e){status('Le traitement a échoué. Réessayez avec un fichier plus court.',true);processed=null;}finally{if(ticket===revision){busy=false;$('#export').disabled=!processed;$('#play').disabled=!processed;}}}
-let timer;function schedule(){if(buffer){busy=true;$('#export').disabled=true;$('#play').disabled=true;offset=position();stop();++revision;clearTimeout(timer);timer=setTimeout(update,250);}}
+async function update(){if(!buffer)return;const ticket=++revision;busy=true;$('#export').disabled=true;$('#play').disabled=!processed;status('Préparation de votre master…');try{const result=await render(buffer,[...values]);if(ticket!==revision)return;processed=result;swapMaster();const peak=stats(result).peak;$('#peak').innerHTML=`${peak? (20*Math.log10(peak)).toFixed(1):'−∞'} <em>dBFS</em>`;status('Master prêt. Écoutez et ajustez à votre goût.');}catch(e){if(ticket!==revision)return;status('Mise à jour impossible. Le dernier master reste disponible. Réessayez.',true);}finally{if(ticket===revision){busy=false;$('#export').disabled=!processed;$('#play').disabled=!processed;}}}
+let timer;function schedule(){if(buffer){busy=true;$('#export').disabled=true;$('#play').disabled=!processed;status('Mise à jour du son…');++revision;clearTimeout(timer);timer=setTimeout(update,250);}}
 values.forEach((_,i)=>$(`#control-${i}`).oninput=e=>{values[i]=Number(e.target.value);sync();$('#preset-label').textContent='Personnalisé';document.querySelectorAll('[data-preset]').forEach(b=>{b.classList.remove('selected');b.setAttribute('aria-pressed','false');});schedule();});
 function preset(name){values=[...presets[name]];sync();$('#preset-label').textContent=name;document.querySelectorAll('[data-preset]').forEach(b=>{b.classList.toggle('selected',b.dataset.preset===name);b.setAttribute('aria-pressed',b.dataset.preset===name);});schedule();}
 document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>preset(b.dataset.preset));$('#reset').onclick=()=>preset('Équilibré');
