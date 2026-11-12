@@ -61,10 +61,16 @@ export async function render(buffer, values, masterGain=0) {
  return result;
 }
 export function wav(buffer) {
-  const channels = buffer.numberOfChannels, size = buffer.length * channels * 2;
-  const data = new ArrayBuffer(44 + size), view = new DataView(data);
-  const str = (offset, value) => [...value].forEach((v, i) => view.setUint8(offset+i, v.charCodeAt(0)));
-  str(0,'RIFF'); view.setUint32(4,36+size,true); str(8,'WAVE'); str(12,'fmt '); view.setUint32(16,16,true); view.setUint16(20,1,true); view.setUint16(22,channels,true); view.setUint32(24,buffer.sampleRate,true); view.setUint32(28,buffer.sampleRate*channels*2,true); view.setUint16(32,channels*2,true); view.setUint16(34,16,true); str(36,'data'); view.setUint32(40,size,true);
-  for(let i=0;i<buffer.length;i++) for(let c=0;c<channels;c++) { const v=Math.max(-1,Math.min(1,buffer.getChannelData(c)[i])); view.setInt16(44+(i*channels+c)*2,Math.round(v*(v<0?32768:32767)),true); }
+  const channels=buffer.numberOfChannels,bytes=3,size=buffer.length*channels*bytes;
+  const padding=size%2,data=new ArrayBuffer(44+size+padding),view=new DataView(data);
+  const str=(offset,value)=>[...value].forEach((v,i)=>view.setUint8(offset+i,v.charCodeAt(0)));
+  str(0,'RIFF');view.setUint32(4,36+size+padding,true);str(8,'WAVE');str(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,channels,true);view.setUint32(24,buffer.sampleRate,true);view.setUint32(28,buffer.sampleRate*channels*bytes,true);view.setUint16(32,channels*bytes,true);view.setUint16(34,24,true);str(36,'data');view.setUint32(40,size,true);
+  const pcm=Array.from({length:channels},(_,c)=>buffer.getChannelData(c));
+  for(let i=0;i<buffer.length;i++)for(let c=0;c<channels;c++){
+    // TPDF dither: two independent uniforms, two quantization steps peak-to-peak.
+    const sample=Math.max(-8388608,Math.min(8388607,Math.round(pcm[c][i]*8388608+Math.random()-Math.random())));
+    const offset=44+(i*channels+c)*bytes;
+    view.setUint8(offset,sample&255);view.setUint8(offset+1,(sample>>8)&255);view.setUint8(offset+2,(sample>>16)&255);
+  }
   return new Blob([data],{type:'audio/wav'});
 }

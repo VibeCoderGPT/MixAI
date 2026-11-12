@@ -2,7 +2,12 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {chromium} from '@playwright/test';
 import {wav} from '../src/audio.js';
-test('WAV header and bounded PCM samples',async()=>{const blob=wav({numberOfChannels:1,length:3,sampleRate:44100,getChannelData:()=>new Float32Array([-2,0,2])});const d=new DataView(await blob.arrayBuffer());assert.equal(d.getUint32(24,true),44100);assert.equal(d.getInt16(44,true),-32768);assert.equal(d.getInt16(48,true),32767);});
+test('24-bit WAV encodes PCM, RIFF padding and bounded dither',async()=>{
+ const samples=new Float32Array([-2,0,.5,2,0]);const blob=wav({numberOfChannels:1,length:samples.length,sampleRate:48000,getChannelData:()=>samples});const d=new DataView(await blob.arrayBuffer());
+ assert.equal(d.getUint32(24,true),48000);assert.equal(d.getUint16(34,true),24);assert.equal(d.getUint16(32,true),3);assert.equal(d.getUint32(40,true),15);assert.equal(d.byteLength,60);assert.equal(d.getUint32(4,true),52);
+ const pcm=i=>{const o=44+i*3,v=d.getUint8(o)|(d.getUint8(o+1)<<8)|(d.getUint8(o+2)<<16);return v&0x800000?v-0x1000000:v;};
+ assert.equal(pcm(0),-8388608);assert.ok(Math.abs(pcm(1))<=1);assert.ok(Math.abs(pcm(2)-4194304)<=1);assert.equal(pcm(3),8388607);
+});
 test('import, process, compare, seek, export and mobile layout',async()=>{
  const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
  try {const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://localhost:5173');

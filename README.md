@@ -16,7 +16,7 @@ Compilation : `npm run build`.
 
 ## Première version
 
-Import mono/stéréo, maximum 80 Mo et 5 minutes, formats décodables par le navigateur. Six presets éditables, égalisation, compression, largeur stéréo, lecture et comparaison, export WAV PCM 16 bits à la fréquence du fichier décodé.
+Import mono/stéréo, maximum 80 Mo et 5 minutes, formats décodables par le navigateur. Six presets éditables, égalisation, compression, largeur stéréo, lecture et comparaison, export WAV PCM 24 bits avec dither TPDF à la fréquence du fichier décodé.
 
 Aucune normalisation LUFS automatique. Le gain master est appliqué au signal traité avant un limiteur stéréo lié (anticipation 5 ms, relâchement 80 ms). Le plafond est −2 dBTP avec une marge de sécurité de 0,2 dB et une estimation sinc à quatre phases. Les LUFS sont mesurés, sans cible imposée. Sous le plafond, les réglages neutres et le gain à zéro préservent le niveau ; les presets peuvent modifier la dynamique. Les mesures des exports sont comparées à FFmpeg à 44,1 et 48 kHz, sans prétendre à une certification pour tous les signaux.
 
