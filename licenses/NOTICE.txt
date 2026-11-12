@@ -1,0 +1,4 @@
+MixAI MP3 encoding uses @breezystack/lamejs 1.2.7 (Alex Zhukov and contributors), LGPL-3.0.
+Package and source: https://www.npmjs.com/package/@breezystack/lamejs/v/1.2.7
+Upstream: https://github.com/shijinyu/lamejs
+Unmodified module source is included as lamejs-source.js; license in lamejs-LICENSE.txt.
