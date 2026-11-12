@@ -77,6 +77,14 @@ test('master gain updates the processed waveform and original remains unchanged'
  await page.locator('#original').click();await page.waitForTimeout(100);assert.equal(await capture(),original);assert.equal(await page.getByText('Audio 100 % local').count(),0);
  // Hold processing long enough to inspect mode switches deterministically.
  await page.evaluate(()=>{const NativeWorker=window.Worker;window.Worker=class extends NativeWorker{postMessage(...args){setTimeout(()=>super.postMessage(...args),500);}};});
+ for(const selector of ['#control-1','#control-2','#control-3','#control-4']){
+  await page.locator('#master').click();
+  await page.locator(selector).evaluate(el=>{el.value=Number(el.value)+1;el.dispatchEvent(new Event('input'));});
+  assert.equal(await page.locator('#wave-loading').isVisible(),false);assert.equal(await page.locator('#gain-loading').isVisible(),false);
+  await page.locator('#original').click();await page.locator('#master').click();assert.equal(await page.locator('#wave-loading').isVisible(),false);
+  await page.waitForFunction(()=>!document.querySelector('#export').disabled);
+ }
+ await page.locator('#original').click();
  for(const selector of ['#master-gain','#control-0']){
   await page.locator(selector).evaluate(el=>{el.value=Number(el.value)+1;el.dispatchEvent(new Event('input'));});
   assert.equal(await page.locator('#wave-loading').isVisible(),false);assert.equal(await capture(),original);
