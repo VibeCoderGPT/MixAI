@@ -26,20 +26,35 @@ export function stats(buffer) {
   for (let c = 0; c < buffer.numberOfChannels; c++) for (const v of buffer.getChannelData(c)) { peak = Math.max(peak, Math.abs(v)); sum += v*v; }
   return {peak, rms: Math.sqrt(sum / (buffer.length * buffer.numberOfChannels))};
 }
+let baseCache;
+function runWorker(payload,channels){
+ return new Promise((resolve,reject)=>{
+  const worker=new Worker(new URL('./mastering-worker.js',import.meta.url),{type:'module'});
+  worker.onmessage=({data})=>{worker.terminate();data.error?reject(new Error(data.error)):resolve(data);};
+  worker.onerror=e=>{worker.terminate();reject(new Error(e.message));};
+  worker.postMessage(payload,channels.map(c=>c.buffer));
+ });
+}
 export async function render(buffer, values, masterGain=0) {
-  const ctx = new OfflineAudioContext(2, buffer.length, buffer.sampleRate);
-  const source = ctx.createBufferSource(); source.buffer = buffer; chain(ctx, source, values).connect(ctx.destination); source.start();
-  const result = await ctx.startRendering();
-  const channels=Array.from({length:result.numberOfChannels},(_,c)=>result.getChannelData(c).slice());
-  const measured=await new Promise((resolve,reject)=>{
-    const worker=new Worker(new URL('./mastering-worker.js',import.meta.url),{type:'module'});
-    worker.onmessage=({data})=>{worker.terminate();data.error?reject(new Error(data.error)):resolve(data);};
-    worker.onerror=e=>{worker.terminate();reject(new Error(e.message));};
-    worker.postMessage({channels,rate:result.sampleRate,target:-14,masterGain},channels.map(c=>c.buffer));
-  });
-  measured.channels.forEach((data,c)=>result.copyToChannel(data,c));
-  result.mastering={lufs:measured.lufs,truePeakDb:measured.truePeakDb,target:measured.target,limited:measured.limited};
-  return result;
+ const key=JSON.stringify(values);
+ if(!baseCache||baseCache.buffer!==buffer||baseCache.key!==key){
+  const promise=(async()=>{
+   const ctx=new OfflineAudioContext(2,buffer.length,buffer.sampleRate);
+   const source=ctx.createBufferSource();source.buffer=buffer;chain(ctx,source,values).connect(ctx.destination);source.start();
+   const rendered=await ctx.startRendering();
+   const channels=Array.from({length:2},(_,c)=>rendered.getChannelData(c).slice());
+   return runWorker({channels,rate:buffer.sampleRate,target:-14},channels);
+  })();
+  baseCache={buffer,key,promise};
+  promise.catch(()=>{if(baseCache?.promise===promise)baseCache=null;});
+ }
+ const base=await baseCache.promise;
+ let measured=base;
+ if(masterGain!==0){const channels=base.channels.map(c=>c.slice());measured=await runWorker({base:{...base,channels},rate:buffer.sampleRate,masterGain},channels);}
+ const result=new AudioBuffer({numberOfChannels:2,length:buffer.length,sampleRate:buffer.sampleRate});
+ measured.channels.forEach((data,c)=>result.copyToChannel(data,c));
+ result.mastering={lufs:measured.lufs,truePeakDb:measured.truePeakDb,target:measured.target,limited:measured.limited};
+ return result;
 }
 export function wav(buffer) {
   const channels = buffer.numberOfChannels, size = buffer.length * channels * 2;

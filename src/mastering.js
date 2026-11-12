@@ -38,10 +38,16 @@ export function master(channels,rate,target=-14,ceilingDb=-1,masterGain=0){
   if(peak>ceiling){const correction=ceiling/peak;for(const data of out)for(let i=0;i<data.length;i++)data[i]*=correction;peak=ceiling;}
   measured=loudness(out,rate);const error=target-measured;if(Math.abs(error)<.2||drive>=30)break;drive=Math.min(30,drive+error);
  }
- if(masterGain!==0){
-  out=limit(out,rate,10**(masterGain/20),ceiling);peak=truePeak(out);
-  if(peak>ceiling){const correction=ceiling/peak;for(const data of out)for(let i=0;i<data.length;i++)data[i]*=correction;peak=ceiling;}
-  measured=loudness(out,rate);
- }
+ if(masterGain!==0)return applyMasterGain({channels:out,lufs:measured,truePeakDb:20*Math.log10(peak),target,limited:Math.abs(target-measured)>.5},rate,masterGain);
+
  return {channels:out,lufs:measured,truePeakDb:20*Math.log10(peak),target,limited:Math.abs(target-measured)>.5};
+}
+
+export function applyMasterGain(base,rate,gainDb){
+ if(gainDb===0)return base;
+ const ceiling=10**(-1.2/20),gain=10**(gainDb/20);
+ if(gainDb<0)return {...base,channels:base.channels.map(c=>c.map(v=>v*gain)),lufs:base.lufs+gainDb,truePeakDb:base.truePeakDb+gainDb};
+ const out=limit(base.channels,rate,gain,ceiling);let peak=truePeak(out);
+ if(peak>ceiling){const correction=ceiling/peak;for(const data of out)for(let i=0;i<data.length;i++)data[i]*=correction;peak=ceiling;}
+ return {...base,channels:out,lufs:loudness(out,rate),truePeakDb:20*Math.log10(peak)};
 }
