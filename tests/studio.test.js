@@ -80,8 +80,8 @@ test('master gain updates the processed waveform and original remains unchanged'
  for(const selector of ['#control-1','#control-2','#control-3','#control-4']){
   await page.locator('#master').click();
   await page.locator(selector).evaluate(el=>{el.value=Number(el.value)+1;el.dispatchEvent(new Event('input'));});
-  assert.equal(await page.locator('#wave-loading').isVisible(),false);assert.equal(await page.locator('#gain-loading').isVisible(),false);
-  await page.locator('#original').click();await page.locator('#master').click();assert.equal(await page.locator('#wave-loading').isVisible(),false);
+  assert.equal(await page.locator('#wave-loading').isVisible(),true);assert.equal(await page.locator('#gain-loading').isVisible(),true);
+  await page.locator('#original').click();assert.equal(await page.locator('#wave-loading').isVisible(),false);await page.locator('#master').click();assert.equal(await page.locator('#wave-loading').isVisible(),true);
   await page.waitForFunction(()=>!document.querySelector('#export').disabled);
  }
  await page.locator('#original').click();
