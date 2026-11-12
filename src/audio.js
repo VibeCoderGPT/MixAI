@@ -30,9 +30,15 @@ export async function render(buffer, values) {
   const ctx = new OfflineAudioContext(2, buffer.length, buffer.sampleRate);
   const source = ctx.createBufferSource(); source.buffer = buffer; chain(ctx, source, values).connect(ctx.destination); source.start();
   const result = await ctx.startRendering();
-  const original = stats(buffer), processed = stats(result);
-  const gain = processed.rms ? Math.min(original.rms / processed.rms, .891 / (processed.peak || 1)) : 1;
-  for (let c = 0; c < result.numberOfChannels; c++) { const data = result.getChannelData(c); for (let i = 0; i < data.length; i++) data[i] *= gain; }
+  const channels=Array.from({length:result.numberOfChannels},(_,c)=>result.getChannelData(c).slice());
+  const measured=await new Promise((resolve,reject)=>{
+    const worker=new Worker(new URL('./mastering-worker.js',import.meta.url),{type:'module'});
+    worker.onmessage=({data})=>{worker.terminate();data.error?reject(new Error(data.error)):resolve(data);};
+    worker.onerror=e=>{worker.terminate();reject(new Error(e.message));};
+    worker.postMessage({channels,rate:result.sampleRate,target:-14},channels.map(c=>c.buffer));
+  });
+  measured.channels.forEach((data,c)=>result.copyToChannel(data,c));
+  result.mastering={lufs:measured.lufs,truePeakDb:measured.truePeakDb,target:measured.target,limited:measured.limited};
   return result;
 }
 export function wav(buffer) {
