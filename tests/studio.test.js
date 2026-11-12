@@ -75,6 +75,16 @@ test('master gain updates the processed waveform and original remains unchanged'
  await page.locator('#original').click();await page.waitForTimeout(100);const original=await capture();assert.notEqual(initial,original);
  await page.locator('#master').click();await page.locator('#master-gain').evaluate(el=>{el.value=6;el.dispatchEvent(new Event('input'));});assert.equal(await page.locator('#gain-loading').isVisible(),true);assert.equal(await page.locator('#wave-loading').isVisible(),true);await page.waitForFunction(()=>!document.querySelector('#export').disabled);assert.equal(await page.locator('#gain-loading').isVisible(),false);assert.equal(await page.locator('#wave-loading').isVisible(),false);assert.notEqual(await capture(),initial);assert.equal(await page.locator('#master-gain-value').textContent(),'+6 dB');
  await page.locator('#original').click();await page.waitForTimeout(100);assert.equal(await capture(),original);assert.equal(await page.getByText('Audio 100 % local').count(),0);
+ // Hold processing long enough to inspect mode switches deterministically.
+ await page.evaluate(()=>{const NativeWorker=window.Worker;window.Worker=class extends NativeWorker{postMessage(...args){setTimeout(()=>super.postMessage(...args),500);}};});
+ for(const selector of ['#master-gain','#control-0']){
+  await page.locator(selector).evaluate(el=>{el.value=Number(el.value)+1;el.dispatchEvent(new Event('input'));});
+  assert.equal(await page.locator('#wave-loading').isVisible(),false);assert.equal(await capture(),original);
+  await page.locator('#master').click();assert.equal(await page.locator('#wave-loading').isVisible(),true);
+  await page.locator('#original').click();assert.equal(await page.locator('#wave-loading').isVisible(),false);assert.equal(await capture(),original);
+  await page.waitForFunction(()=>!document.querySelector('#export').disabled);assert.equal(await capture(),original);assert.equal(await page.locator('#wave-loading').isVisible(),false);
+ }
+
  }finally{await browser.close();}
 });
 test('intensity increases density without reducing loudness on sustained and transient mixes',async()=>{
