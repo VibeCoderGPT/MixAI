@@ -26,11 +26,13 @@ export function stats(buffer) {
   for (let c = 0; c < buffer.numberOfChannels; c++) for (const v of buffer.getChannelData(c)) { peak = Math.max(peak, Math.abs(v)); sum += v*v; }
   return {peak, rms: Math.sqrt(sum / (buffer.length * buffer.numberOfChannels))};
 }
-let baseCache;
+let baseCache, cancelGain;
+export function cancelPendingGain(){cancelGain?.();cancelGain=null;}
 function runWorker(payload,channels){
  return new Promise((resolve,reject)=>{
   const worker=new Worker(new URL('./mastering-worker.js',import.meta.url),{type:'module'});
-  worker.onmessage=({data})=>{worker.terminate();data.error?reject(new Error(data.error)):resolve(data);};
+  if(payload.base){cancelPendingGain();cancelGain=()=>{worker.terminate();reject(new Error('Superseded gain'));};}
+  worker.onmessage=({data})=>{worker.terminate();if(payload.base)cancelGain=null;data.error?reject(new Error(data.error)):resolve(data);};
   worker.onerror=e=>{worker.terminate();reject(new Error(e.message));};
   worker.postMessage(payload,channels.map(c=>c.buffer));
  });

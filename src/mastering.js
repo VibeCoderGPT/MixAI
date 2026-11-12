@@ -18,7 +18,7 @@ export function loudness(channels, rate){
 // Four-phase windowed-sinc reconstruction; leave 0.2 dB safety margin below the ceiling.
 export function truePeak(channels){
  const kernels=[1,2,3].map(phase=>{const taps=[];let sum=0;for(let j=-15;j<=16;j++){const x=phase/4-j;const v=(Math.sin(Math.PI*x)/(Math.PI*x))*(.5+.5*Math.cos(Math.PI*x/16));taps.push(v);sum+=v;}return taps.map(v=>v/sum);});
- let peak=0;for(const data of channels){for(let i=0;i<data.length;i++){peak=Math.max(peak,Math.abs(data[i]));for(const taps of kernels){let value=0;for(let j=0;j<32;j++){const index=i+j-15;if(index>=0&&index<data.length)value+=data[index]*taps[j];}peak=Math.max(peak,Math.abs(value));}}}return peak;
+ let peak=0;for(const data of channels){for(let i=0;i<data.length;i++){peak=Math.max(peak,Math.abs(data[i]));for(const taps of kernels){let value=0;const start=Math.max(0,15-i),end=Math.min(32,data.length-i+15);for(let j=start;j<end;j++)value+=data[i+j-15]*taps[j];peak=Math.max(peak,Math.abs(value));}}}return peak;
 }
 function limit(channels,rate,gain,ceiling){
  const length=channels[0].length,look=Math.round(rate*.005),peaks=new Float32Array(length),future=new Float32Array(length),queue=new Int32Array(length);let head=0,tail=0;
@@ -46,7 +46,7 @@ export function master(channels,rate,target=-14,ceilingDb=-1,masterGain=0){
 export function applyMasterGain(base,rate,gainDb){
  if(gainDb===0)return base;
  const ceiling=10**(-1.2/20),gain=10**(gainDb/20);
- if(gainDb<0)return {...base,channels:base.channels.map(c=>c.map(v=>v*gain)),lufs:base.lufs+gainDb,truePeakDb:base.truePeakDb+gainDb};
+ if(base.truePeakDb+gainDb<=-1.2)return {...base,channels:base.channels.map(c=>c.map(v=>v*gain)),lufs:base.lufs+gainDb,truePeakDb:base.truePeakDb+gainDb};
  const out=limit(base.channels,rate,gain,ceiling);let peak=truePeak(out);
  if(peak>ceiling){const correction=ceiling/peak;for(const data of out)for(let i=0;i<data.length;i++)data[i]*=correction;peak=ceiling;}
  return {...base,channels:out,lufs:loudness(out,rate),truePeakDb:20*Math.log10(peak)};
