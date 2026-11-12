@@ -34,3 +34,22 @@ test('preset changes keep playback advancing and respect pause',async()=>{
  assert.equal(await page.locator('#play').getAttribute('aria-label'),'Lire');assert.equal(await page.locator('#preset-label').textContent(),'Streaming');
  }finally{await browser.close();}
 });
+test('waveform hover highlights a bar and clicks seek paused or playing',async()=>{
+ const browser=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox']});
+ try{const page=await browser.newPage();await page.goto('http://localhost:5173');
+ await page.locator('#wave').click();assert.equal(await page.locator('#play').isDisabled(),true);
+ const samples=Float32Array.from({length:44100*12},(_,i)=>.6*Math.sin(i*.04));
+ await page.locator('#file').setInputFiles({name:'seek.wav',mimeType:'audio/wav',buffer:Buffer.from(await wav({numberOfChannels:1,length:samples.length,sampleRate:44100,getChannelData:()=>samples}).arrayBuffer())});
+ await page.waitForFunction(()=>!document.querySelector('#export').disabled);
+ const box=await page.locator('#wave').boundingBox();const x=Math.floor(box.width/8)*4+1;
+ await page.mouse.move(box.x+x,box.y+box.height/2);
+ const pixel=()=>page.evaluate(x=>{const c=document.querySelector('#wave');return [...c.getContext('2d').getImageData(Math.floor(x*devicePixelRatio),Math.floor(c.height/2),1,1).data].slice(0,3);},x);
+ assert.deepEqual(await pixel(),[255,255,255]);
+ await page.mouse.move(0,0);assert.deepEqual(await pixel(),[255,117,71]);
+ await page.mouse.click(box.x+box.width*.5,box.y+box.height/2);
+ assert.ok(Math.abs(Number(await page.locator('#seek').inputValue())-50)<1);assert.equal(await page.locator('#play').getAttribute('aria-label'),'Lire');
+ await page.locator('#play').click();await page.mouse.click(box.x+box.width*.25,box.y+box.height/2);
+ assert.equal(await page.locator('#play').getAttribute('aria-label'),'Pause');
+ await page.waitForFunction(()=>Number(document.querySelector('#seek').value)>28);
+ }finally{await browser.close();}
+});
