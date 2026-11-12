@@ -53,3 +53,12 @@ test('waveform hover highlights a bar and clicks seek paused or playing',async()
  await page.waitForFunction(()=>Number(document.querySelector('#seek').value)>28);
  }finally{await browser.close();}
 });
+test('one white waveform bar follows playback and paused seeking',async()=>{
+ const browser=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox']});
+ try{const page=await browser.newPage();await page.goto('http://localhost:5173');const samples=Float32Array.from({length:44100*8},(_,i)=>.5*Math.sin(i*.04));
+ await page.locator('#file').setInputFiles({name:'cursor.wav',mimeType:'audio/wav',buffer:Buffer.from(await wav({numberOfChannels:1,length:samples.length,sampleRate:44100,getChannelData:()=>samples}).arrayBuffer())});await page.waitForFunction(()=>!document.querySelector('#export').disabled);await page.mouse.move(0,0);
+ const check=()=>page.evaluate(()=>{const c=document.querySelector('#wave'),ctx=c.getContext('2d'),width=c.getBoundingClientRect().width;const white=[];for(let x=0;x<width;x+=4){const p=ctx.getImageData(Math.floor((x+1)*devicePixelRatio),Math.floor(c.height/2),1,1).data;if(p[0]===255&&p[1]===255&&p[2]===255)white.push(x/4);}return {white,expected:Math.min(Math.ceil(width/4)-1,Math.round(Number(document.querySelector('#seek').value)/100*width/4))};});
+ assert.deepEqual((await check()).white,[0]);await page.locator('#play').click();await page.waitForFunction(()=>Number(document.querySelector('#seek').value)>5);let state=await check();assert.deepEqual(state.white,[state.expected]);assert.ok(state.expected>0);
+ await page.locator('#play').click();await page.locator('#seek').evaluate(el=>{el.value=75;el.dispatchEvent(new Event('input'));});await page.waitForTimeout(100);state=await check();assert.deepEqual(state.white,[state.expected]);assert.equal(await page.locator('#play').getAttribute('aria-label'),'Lire');
+ }finally{await browser.close();}
+});

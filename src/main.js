@@ -57,7 +57,20 @@ const waveform = $('#wave');
 waveform.onpointermove=e=>{if(!buffer)return;const rect=waveform.getBoundingClientRect();hoveredBar=Math.floor((e.clientX-rect.left)/4)*4;draw();};
 waveform.onpointerleave=()=>{hoveredBar=-1;draw();};
 waveform.onclick=e=>{if(!buffer)return;const rect=waveform.getBoundingClientRect();seekTo((e.clientX-rect.left)/rect.width);};
-function draw(){const canvas=$('#wave'),r=canvas.getBoundingClientRect();canvas.width=r.width*devicePixelRatio;canvas.height=r.height*devicePixelRatio;const c=canvas.getContext('2d');c.scale(devicePixelRatio,devicePixelRatio);const data=buffer?.getChannelData(0);for(let x=0;x<r.width;x+=4){let peak=.025;if(data){const start=Math.floor(x/r.width*data.length),end=Math.floor((x+4)/r.width*data.length);for(let j=start;j<Math.min(end,data.length);j++)peak=Math.max(peak,Math.abs(data[j]));}c.fillStyle=data?(x===hoveredBar?'#FFFFFF':'#FF7547'):'#363c45';const h=Math.max(2,peak*r.height*.85);c.fillRect(x,(r.height-h)/2,2,h);}}
+let waveCache = {buffer:null,width:0,peaks:[]};
+function draw(){
+ const canvas=$('#wave'),r=canvas.getBoundingClientRect();
+ canvas.width=r.width*devicePixelRatio;canvas.height=r.height*devicePixelRatio;
+ const c=canvas.getContext('2d');c.scale(devicePixelRatio,devicePixelRatio);
+ // Cache amplitude bins so playback frames never rescan the entire song.
+ if(waveCache.buffer!==buffer||waveCache.width!==r.width){
+  const data=buffer?.getChannelData(0),peaks=[];
+  for(let x=0;x<r.width;x+=4){let peak=.025;if(data){const start=Math.floor(x/r.width*data.length),end=Math.min(data.length,Math.floor((x+4)/r.width*data.length));for(let j=start;j<end;j++)peak=Math.max(peak,Math.abs(data[j]));}peaks.push(peak);}
+  waveCache={buffer,width:r.width,peaks};
+ }
+ const current=buffer?Math.min(waveCache.peaks.length-1,Math.round(position()/buffer.duration*r.width/4)):-1;
+ waveCache.peaks.forEach((peak,i)=>{const x=i*4;c.fillStyle=buffer?(i===current||x===hoveredBar?'#FFFFFF':'#FF7547'):'#363c45';const h=Math.max(2,peak*r.height*.85);c.fillRect(x,(r.height-h)/2,2,h);});
+}
 new ResizeObserver(draw).observe($('#wave'));
 async function update(){if(!buffer)return;const ticket=++revision;busy=true;$('#export').disabled=true;$('#play').disabled=!processed;status('Préparation de votre master…');try{const result=await render(buffer,[...values]);if(ticket!==revision)return;processed=result;swapMaster();const peak=stats(result).peak;$('#peak').innerHTML=`${peak? (20*Math.log10(peak)).toFixed(1):'−∞'} <em>dBFS</em>`;status('Master prêt. Écoutez et ajustez à votre goût.');}catch(e){if(ticket!==revision)return;status('Mise à jour impossible. Le dernier master reste disponible. Réessayez.',true);}finally{if(ticket===revision){busy=false;$('#export').disabled=!processed;$('#play').disabled=!processed;}}}
 let timer;function schedule(){if(buffer){busy=true;$('#export').disabled=true;$('#play').disabled=!processed;status('Mise à jour du son…');++revision;clearTimeout(timer);timer=setTimeout(update,250);}}
@@ -69,7 +82,7 @@ async function load(file){if(!file)return;if(file.size>80*1024*1024){status('Ce 
 $('#drop').onclick=$('#replace').onclick=()=>$('#file').click();$('#file').onchange=e=>{load(e.target.files[0]);e.target.value='';};
 $('#drop').ondragover=e=>{e.preventDefault();$('#drop').classList.add('drag');};$('#drop').ondragleave=()=>$('#drop').classList.remove('drag');$('#drop').ondrop=e=>{e.preventDefault();$('#drop').classList.remove('drag');load(e.dataTransfer.files[0]);};
 $('#export').onclick=()=>{if(!processed||busy)return;const url=URL.createObjectURL(wav(processed));const a=document.createElement('a');a.href=url;a.download=$('#filename').textContent.replace(/\.[^.]+$/,'')+'-MixAI.wav';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);status('Votre master WAV a été téléchargé.');};
-setInterval(()=>{if(buffer){const p=position();$('#time').textContent=time(p);$('#seek').value=p/buffer.duration*100;}},100);
+setInterval(()=>{if(buffer){const p=position();$('#time').textContent=time(p);$('#seek').value=p/buffer.duration*100;draw();}},50);
 
 // Rotary controls support vertical pointer dragging; native sliders remain keyboard accessible.
 document.querySelectorAll('.knob').forEach(knob=>{const input=knob.parentElement.querySelector('input');let originY,originValue;knob.onpointerdown=e=>{originY=e.clientY;originValue=Number(input.value);knob.setPointerCapture(e.pointerId);input.focus();};knob.onpointermove=e=>{if(!knob.hasPointerCapture(e.pointerId))return;input.value=Math.round(originValue+(originY-e.clientY)*(Number(input.max)-Number(input.min))/140);input.dispatchEvent(new Event('input'));};knob.onpointerup=e=>{if(knob.hasPointerCapture(e.pointerId))knob.releasePointerCapture(e.pointerId);};});
