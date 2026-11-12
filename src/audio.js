@@ -37,24 +37,21 @@ function runWorker(payload,channels){
  });
 }
 export async function render(buffer, values, masterGain=0) {
- const key=JSON.stringify(values.slice(1));
- // Intensity drives the same final limiter, rather than a second compressor
- // with browser-dependent makeup gain. Zero is an exact intensity bypass.
- const driveDb=masterGain+Math.max(0,Math.min(100,values[0]))*.06;
+ const key=JSON.stringify(values);
  if(!baseCache||baseCache.buffer!==buffer||baseCache.key!==key){
   const promise=(async()=>{
    const ctx=new OfflineAudioContext(2,buffer.length,buffer.sampleRate);
    const source=ctx.createBufferSource();source.buffer=buffer;chain(ctx,source,values).connect(ctx.destination);source.start();
    const rendered=await ctx.startRendering();
    const channels=Array.from({length:2},(_,c)=>rendered.getChannelData(c).slice());
-   return runWorker({channels,rate:buffer.sampleRate},channels);
+   return runWorker({channels,rate:buffer.sampleRate,intensity:values[0]},channels);
   })();
   baseCache={buffer,key,promise};
   promise.catch(()=>{if(baseCache?.promise===promise)baseCache=null;});
  }
  const base=await baseCache.promise;
  let measured=base;
- if(driveDb!==0||base.truePeakDb>-2.2){const channels=base.channels.map(c=>c.slice());measured=await runWorker({base:{...base,channels},rate:buffer.sampleRate,masterGain:driveDb},channels);}
+ if(masterGain!==0||base.truePeakDb>-2.2){const channels=base.channels.map(c=>c.slice());measured=await runWorker({base:{...base,channels},rate:buffer.sampleRate,masterGain:masterGain},channels);}
  const result=new AudioBuffer({numberOfChannels:2,length:buffer.length,sampleRate:buffer.sampleRate});
  measured.channels.forEach((data,c)=>result.copyToChannel(data,c));
  result.mastering={lufs:measured.lufs,truePeakDb:measured.truePeakDb};

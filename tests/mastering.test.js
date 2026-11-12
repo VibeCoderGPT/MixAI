@@ -4,7 +4,7 @@ import {spawnSync} from 'node:child_process';
 import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {master,loudness} from '../src/mastering.js';
+import {master,loudness,compress} from '../src/mastering.js';
 import {wav} from '../src/audio.js';
 for(const rate of [44100,48000])test(`mastering meets independent FFmpeg loudness and peak checks at ${rate}`,async()=>{
  const channels=Array.from({length:2},(_,c)=>Float32Array.from({length:rate*4},(_,i)=>{
@@ -30,4 +30,14 @@ test('master gain increases loudness while protecting reconstructed peaks',()=>{
 
 test('zero gain preserves quiet and loud input below ceiling without LUFS normalization',()=>{
  for(const amplitude of [.02,.6]){const input=Float32Array.from({length:44100},(_,i)=>amplitude*Math.sin(i*.04));const result=master([input],44100);assert.deepEqual(result.channels[0],input);assert.equal(result.lufs,loudness([input],44100));}
+});
+
+test('compression reduces level contrast with loudness compensation, rather than adding gain',()=>{
+ const rate=44100,input=Float32Array.from({length:rate*4},(_,i)=>((i/rate)%2<1?.04:.35)*Math.sin(i*2*Math.PI*440/rate));
+ assert.equal(compress([input],rate,0)[0],input);
+ const rms=(data,start,end)=>Math.sqrt(data.slice(start,end).reduce((sum,v)=>sum+v*v,0)/(end-start));
+ const contrast=data=>20*Math.log10(rms(data,rate*1.5,rate*1.9)/rms(data,rate*.5,rate*.9));
+ let previous=contrast(input);
+ for(const intensity of [25,50,100]){const result=compress([input,input],rate,intensity);const measured=contrast(result[0]);assert.ok(measured<previous-.1);previous=measured;assert.ok(Math.abs(loudness(result,rate)-loudness([input,input],rate))<.2);assert.deepEqual(result[0],result[1]);}
+ const silent=compress([new Float32Array(rate)],rate,100);assert.ok(silent[0].every(v=>v===0));
 });

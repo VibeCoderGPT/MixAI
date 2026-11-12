@@ -41,3 +41,26 @@ export function applyMasterGain(base,rate,gainDb){
  if(peak>ceiling){const correction=ceiling/peak;for(const data of out)for(let i=0;i<data.length;i++)data[i]*=correction;peak=ceiling;}
  return {...base,channels:out,lufs:loudness(out,rate),truePeakDb:20*Math.log10(peak)};
 }
+
+// Stereo-linked soft-knee compression. Compensation matches input loudness,
+// not a fixed streaming target; the final limiter remains independent.
+export function compress(channels,rate,intensity){
+ const amount=Math.max(0,Math.min(100,intensity))/100;
+ if(amount===0)return channels;
+ const threshold=-12-18*amount,ratio=1+3*amount,knee=6;
+ const attack=Math.exp(-1/(rate*.015)),release=Math.exp(-1/(rate*.15));
+ let reduction=0;
+ const out=channels.map(c=>new Float32Array(c.length));
+ for(let i=0;i<channels[0].length;i++){
+  let peak=0;for(const c of channels)peak=Math.max(peak,Math.abs(c[i]));
+  const over=20*Math.log10(Math.max(peak,1e-12))-threshold;
+  const desired=over<=-knee/2?0:over>=knee/2?(1-1/ratio)*over:(1-1/ratio)*(over+knee/2)**2/(2*knee);
+  const coefficient=desired>reduction?attack:release;
+  reduction=coefficient*reduction+(1-coefficient)*desired;
+  const gain=10**(-reduction/20);for(let c=0;c<out.length;c++)out[c][i]=channels[c][i]*gain;
+ }
+ const before=loudness(channels,rate),after=loudness(out,rate);
+ const compensation=Number.isFinite(before)&&Number.isFinite(after)?10**(Math.min(18,before-after)/20):1;
+ for(const c of out)for(let i=0;i<c.length;i++)c[i]*=compensation;
+ return out;
+}
