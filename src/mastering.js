@@ -18,7 +18,17 @@ export function loudness(channels, rate){
 // Four-phase windowed-sinc reconstruction; leave 0.2 dB safety margin below the ceiling.
 export function truePeak(channels){
  const kernels=[1,2,3].map(phase=>{const taps=[];let sum=0;for(let j=-15;j<=16;j++){const x=phase/4-j;const v=(Math.sin(Math.PI*x)/(Math.PI*x))*(.5+.5*Math.cos(Math.PI*x/16));taps.push(v);sum+=v;}return taps.map(v=>v/sum);});
- let peak=0;for(const data of channels){for(let i=0;i<data.length;i++){peak=Math.max(peak,Math.abs(data[i]));for(const taps of kernels){let value=0;const start=Math.max(0,15-i),end=Math.min(32,data.length-i+15);for(let j=start;j<end;j++)value+=data[i+j-15]*taps[j];peak=Math.max(peak,Math.abs(value));}}}return peak;
+ const [k0,k1,k2]=kernels;
+ let peak=0;
+ for(const data of channels){
+  const padded=new Float32Array(data.length+32);padded.set(data,15);
+  for(let i=0;i<data.length;i++){
+   let v0=0,v1=0,v2=0;
+   for(let j=0;j<32;j++){const sample=padded[i+j];v0+=sample*k0[j];v1+=sample*k1[j];v2+=sample*k2[j];}
+   peak=Math.max(peak,Math.abs(data[i]),Math.abs(v0),Math.abs(v1),Math.abs(v2));
+  }
+ }
+ return peak;
 }
 function limit(channels,rate,gain,ceiling){
  const length=channels[0].length,look=Math.round(rate*.005),peaks=new Float32Array(length),future=new Float32Array(length),queue=new Int32Array(length);let head=0,tail=0;

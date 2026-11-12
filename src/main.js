@@ -58,9 +58,16 @@ const waveform = $('#wave');
 waveform.onpointermove=e=>{if(!buffer)return;const rect=waveform.getBoundingClientRect();hoveredBar=Math.floor((e.clientX-rect.left)/4)*4;draw();};
 waveform.onpointerleave=()=>{hoveredBar=-1;draw();};
 waveform.onclick=e=>{if(!buffer)return;const rect=waveform.getBoundingClientRect();seekTo((e.clientX-rect.left)/rect.width);};
+let lastWaveFrame;
 let waveCache = {buffer:null,width:0,peaks:[]};
 function draw(){
  const canvas=$('#wave'),r=canvas.getBoundingClientRect();
+ const shown=mode==='master'?(processed||buffer):buffer;
+ const marker=buffer?Math.round(Number($('#seek').value)/100*r.width/4):-1;
+ const frame=[shown,r.width,r.height,devicePixelRatio,marker,hoveredBar];
+ if(lastWaveFrame&&frame.every((v,i)=>v===lastWaveFrame[i]))return;
+ lastWaveFrame=frame;
+
  canvas.width=r.width*devicePixelRatio;canvas.height=r.height*devicePixelRatio;
  const c=canvas.getContext('2d');c.scale(devicePixelRatio,devicePixelRatio);
  // Cache amplitude bins so playback frames never rescan the entire song.

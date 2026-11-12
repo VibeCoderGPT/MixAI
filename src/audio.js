@@ -25,24 +25,30 @@ export function stats(buffer) {
   for (let c = 0; c < buffer.numberOfChannels; c++) for (const v of buffer.getChannelData(c)) { peak = Math.max(peak, Math.abs(v)); sum += v*v; }
   return {peak, rms: Math.sqrt(sum / (buffer.length * buffer.numberOfChannels))};
 }
-let baseCache, cancelGain;
-export function cancelPendingGain(){cancelGain?.();cancelGain=null;}
+let baseCache, toneCache, cancelGain, renderGeneration=0;
+export function cancelPendingGain(){renderGeneration++;cancelGain?.();cancelGain=null;}
 function runWorker(payload,channels){
  return new Promise((resolve,reject)=>{
   const worker=new Worker(new URL('./mastering-worker.js',import.meta.url),{type:'module'});
-  if(payload.base){cancelPendingGain();cancelGain=()=>{worker.terminate();reject(new Error('Superseded gain'));};}
+  if(payload.base){cancelGain?.();cancelGain=()=>{worker.terminate();reject(new Error('Superseded gain'));};}
   worker.onmessage=({data})=>{worker.terminate();if(payload.base)cancelGain=null;data.error?reject(new Error(data.error)):resolve(data);};
   worker.onerror=e=>{worker.terminate();reject(new Error(e.message));};
   worker.postMessage(payload,channels.map(c=>c.buffer));
  });
 }
 export async function render(buffer, values, masterGain=0) {
+ const generation=++renderGeneration;
  const key=JSON.stringify(values);
  if(!baseCache||baseCache.buffer!==buffer||baseCache.key!==key){
   const promise=(async()=>{
-   const ctx=new OfflineAudioContext(2,buffer.length,buffer.sampleRate);
-   const source=ctx.createBufferSource();source.buffer=buffer;chain(ctx,source,values).connect(ctx.destination);source.start();
-   const rendered=await ctx.startRendering();
+   const toneKey=JSON.stringify(values.slice(1));
+   if(!toneCache||toneCache.buffer!==buffer||toneCache.key!==toneKey){
+    const ctx=new OfflineAudioContext(2,buffer.length,buffer.sampleRate);
+    const source=ctx.createBufferSource();source.buffer=buffer;chain(ctx,source,values).connect(ctx.destination);source.start();
+    toneCache={buffer,key:toneKey,promise:ctx.startRendering()};
+   }
+   const rendered=await toneCache.promise;
+   if(baseCache?.key!==key||baseCache?.buffer!==buffer)throw new Error('Superseded settings');
    const channels=Array.from({length:2},(_,c)=>rendered.getChannelData(c).slice());
    return runWorker({channels,rate:buffer.sampleRate,intensity:values[0]},channels);
   })();
@@ -50,6 +56,7 @@ export async function render(buffer, values, masterGain=0) {
   promise.catch(()=>{if(baseCache?.promise===promise)baseCache=null;});
  }
  const base=await baseCache.promise;
+ if(generation!==renderGeneration)throw new Error('Superseded render');
  let measured=base;
  if(masterGain!==0||base.truePeakDb>-2.2){const channels=base.channels.map(c=>c.slice());measured=await runWorker({base:{...base,channels},rate:buffer.sampleRate,masterGain:masterGain},channels);}
  const result=new AudioBuffer({numberOfChannels:2,length:buffer.length,sampleRate:buffer.sampleRate});
